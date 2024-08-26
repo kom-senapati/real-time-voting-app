@@ -21,6 +21,10 @@ The Real-Time Vote App provides a seamless voting experience with live updates u
 <details>
 <summary><h1><b>Screenshots:</b></h1></summary>
 
+![image](https://github.com/user-attachments/assets/9acee59c-70b8-4241-90ed-110c942e079d)
+![image](https://github.com/user-attachments/assets/d086a687-9d91-4aec-9430-eb7a9cfcfe7b)
+![image](https://github.com/user-attachments/assets/9b1ca939-faf4-41c3-b41c-0f37333fed90)
+
 </details>
 
 ## **Demo Video:**
