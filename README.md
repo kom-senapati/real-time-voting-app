@@ -29,7 +29,7 @@ The Real-Time Vote App provides a seamless voting experience with live updates u
 
 ## **Demo Video:**
 
-[![YouTube](http://i.ytimg.com/vi/id/hqdefault.jpg)](https://www.youtube.com/watch?v=id)
+[Link](https://www.youtube.com/watch?v=3iR6Gaa3RtA)
 
 ## **Getting Started:**
 
