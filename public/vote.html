@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real-Time Vote App</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css"
+    />
+  </head>
+
+  <body class="bg-gray-100 flex items-center justify-center h-screen m-0">
+    <a href="/" class="absolute top-4 left-4">
+      <button
+        type="button"
+        class="bg-white text-center w-48 rounded-2xl h-14 relative font-sans text-black text-xl font-semibold group"
+      >
+        <div
+          class="bg-green-400 rounded-xl h-12 w-1/4 flex items-center justify-center absolute left-1 top-[4px] group-hover:w-[184px] z-10 duration-500"
+        >
+          <svg
+            width="25px"
+            height="25px"
+            viewBox="0 0 1024 1024"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              fill="#000000"
+              d="M224 480h640a32 32 0 1 1 0 64H224a32 32 0 0 1 0-64z"
+            ></path>
+            <path
+              fill="#000000"
+              d="m237.248 512 265.408 265.344a32 32 0 0 1-45.312 45.312l-288-288a32 32 0 0 1 0-45.312l288-288a32 32 0 1 1 45.312 45.312L237.248 512z"
+            ></path>
+          </svg>
+        </div>
+        <p class="translate-x-2">Back</p>
+      </button>
+    </a>
+
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md text-center">
+      <h1 class="text-2xl font-bold mb-4">Vote for Your Favorite Party</h1>
+
+      <div class="mb-4">
+        <input
+          type="text"
+          id="userName"
+          placeholder="Enter your name"
+          class="text-gray-700 border border-gray-300 rounded-lg py-2 px-4 w-full"
+        />
+      </div>
+
+      <div id="results" class="mb-4">
+        <canvas id="voteChart"></canvas>
+      </div>
+
+      <div class="mb-4">
+        <select
+          id="partyDropdown"
+          class="text-gray-700 border border-gray-300 rounded-lg py-2 px-4 w-full"
+        >
+          <option value="" disabled selected>Select Party</option>
+          <option value="A">Party A</option>
+          <option value="B">Party B</option>
+          <option value="C">Party C</option>
+          <option value="D">Party D</option>
+          <option value="E">Party E</option>
+        </select>
+      </div>
+
+      <button
+        id="voteButton"
+        class="bg-blue-500 text-white py-2 px-4 rounded w-full opacity-50 cursor-not-allowed"
+        disabled
+      >
+        Vote
+      </button>
+    </div>
+
+    <script>
+      const protocol =
+        window.location.protocol === "https:" ? "https:" : "http:";
+      const eventSourceUrl = `${protocol}//${window.location.host}/api/vote/stream`;
+
+      const ctx = document.getElementById("voteChart").getContext("2d");
+      const voteChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["Party A", "Party B", "Party C", "Party D", "Party E"],
+          datasets: [
+            {
+              label: "Votes",
+              data: [0, 0, 0, 0, 0],
+              backgroundColor: [
+                "#FF5733",
+                "#33FF57",
+                "#3357FF",
+                "#F1C40F",
+                "#8E44AD",
+              ],
+              borderColor: [
+                "#FF5733",
+                "#33FF57",
+                "#3357FF",
+                "#F1C40F",
+                "#8E44AD",
+              ],
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+            },
+          },
+        },
+      });
+
+      fetch("/api/vote")
+        .then((response) => response.json())
+        .then((data) => {
+          const votes = ["A", "B", "C", "D", "E"];
+          votes.forEach((party, index) => {
+            if (data[party] !== undefined) {
+              voteChart.data.datasets[0].data[index] = data[party];
+            }
+          });
+          voteChart.update();
+        })
+        .catch((error) => {
+          console.error("Error fetching initial vote counts:", error);
+        });
+      
+      const eventSource = new EventSource(eventSourceUrl);
+
+      eventSource.onopen = () => {
+        console.log("Connection to server opened.");
+      };
+
+      eventSource.onmessage = function (event) {
+        console.log("Received vote:", event.data);
+        let vote = JSON.stringify(event.data);
+        vote = vote.replace(/\\|\"/g, "");
+
+        const votes = ["A", "B", "C", "D", "E"];
+        const voteIndex = votes.indexOf(vote);
+        if (voteIndex !== -1) {
+          const currentData = voteChart.data.datasets[0].data;
+          currentData[voteIndex]++;
+          voteChart.update();
+        } else {
+          console.error("Unexpected vote data:", vote);
+        }
+      };
+
+      eventSource.onerror = function (error) {
+        console.error("EventSource error:", error);
+      };
+
+      const userNameInput = document.getElementById("userName");
+      const voteButton = document.getElementById("voteButton");
+
+      userNameInput.addEventListener("input", () => {
+        if (userNameInput.value.trim() !== "") {
+          voteButton.classList.remove("opacity-50", "cursor-not-allowed");
+          voteButton.disabled = false;
+        } else {
+          voteButton.classList.add("opacity-50", "cursor-not-allowed");
+          voteButton.disabled = true;
+        }
+      });
+
+      voteButton.addEventListener("click", () => {
+        const party = document.getElementById("partyDropdown").value;
+        const userName = userNameInput.value.trim();
+
+        if (!party) {
+          showToast("Please select a party to vote for.", "error");
+          return;
+        }
+
+        fetch("/api/vote/submit", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ candidate: party, user: userName }),
+        })
+          .then((response) => response.json())
+          .then(() => {
+            showToast(
+              `Thank you, ${userName}. You voted for Party ${party}`,
+              "success"
+            );
+          })
+          .catch((error) => {
+            console.error("Error submitting vote:", error);
+            showToast("Error submitting vote.", "error");
+          });
+      });
+
+      function showToast(message, type) {
+        Toastify({
+          text: message,
+          duration: 3000,
+          close: true,
+          gravity: "top",
+          position: "right",
+          backgroundColor: type === "success" ? "seagreen" : "indianred",
+          stopOnFocus: true,
+        }).showToast();
+      }
+    </script>
+  </body>
+</html>
