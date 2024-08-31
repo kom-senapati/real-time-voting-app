@@ -72,20 +72,36 @@
         </select>
       </div>
 
-      <button
-        id="voteButton"
-        class="bg-blue-500 text-white py-2 px-4 rounded w-full opacity-50 cursor-not-allowed"
-        disabled
-      >
-        Vote
-      </button>
+      <div class="flex gap-4">
+        <button
+          id="voteButton"
+          class="bg-blue-500 text-white py-2 px-4 rounded w-full opacity-50 cursor-not-allowed"
+          disabled
+        >
+          Vote
+        </button>
+        <button
+          id="updateButton"
+          class="bg-yellow-500 text-white py-2 px-4 rounded w-full opacity-50 cursor-not-allowed"
+          disabled
+        >
+          Update
+        </button>
+        <button
+          id="deleteButton"
+          class="bg-red-500 text-white py-2 px-4 rounded w-full opacity-50 cursor-not-allowed"
+          disabled
+        >
+          Delete
+        </button>
+      </div>
     </div>
 
     <script>
       const protocol =
         window.location.protocol === "https:" ? "https:" : "http:";
       const eventSourceUrl = `${protocol}//${window.location.host}/api/vote/stream`;
-
+      const votes = ["A", "B", "C", "D", "E"];
       const ctx = document.getElementById("voteChart").getContext("2d");
       const voteChart = new Chart(ctx, {
         type: "bar",
@@ -137,7 +153,7 @@
         .catch((error) => {
           console.error("Error fetching initial vote counts:", error);
         });
-      
+
       const eventSource = new EventSource(eventSourceUrl);
 
       eventSource.onopen = () => {
@@ -145,19 +161,32 @@
       };
 
       eventSource.onmessage = function (event) {
-        console.log("Received vote:", event.data);
-        let vote = JSON.stringify(event.data);
-        vote = vote.replace(/\\|\"/g, "");
-
-        const votes = ["A", "B", "C", "D", "E"];
+        let dataString = event.data;
+        dataString = dataString.replace(/\\|\"/g, "");
+        const [name, action, vote, old] = dataString.split(":");
         const voteIndex = votes.indexOf(vote);
-        if (voteIndex !== -1) {
-          const currentData = voteChart.data.datasets[0].data;
-          currentData[voteIndex]++;
-          voteChart.update();
-        } else {
+        const oldVoteIndex = votes.indexOf(old);
+
+        if (voteIndex === -1 || (action === "update" && oldVoteIndex === -1)) {
           console.error("Unexpected vote data:", vote);
+          return;
         }
+
+        const currentData = voteChart.data.datasets[0].data;
+
+        if (action === "create") {
+          currentData[voteIndex]++;
+        } else if (action === "delete") {
+          currentData[voteIndex] = Math.max(0, currentData[voteIndex] - 1);
+        } else if (action === "update") {
+          currentData[oldVoteIndex] = Math.max(
+            0,
+            currentData[oldVoteIndex] - 1
+          );
+          currentData[voteIndex]++;
+        }
+
+        voteChart.update();
       };
 
       eventSource.onerror = function (error) {
@@ -166,45 +195,65 @@
 
       const userNameInput = document.getElementById("userName");
       const voteButton = document.getElementById("voteButton");
+      const updateButton = document.getElementById("updateButton");
+      const deleteButton = document.getElementById("deleteButton");
 
-      userNameInput.addEventListener("input", () => {
-        if (userNameInput.value.trim() !== "") {
-          voteButton.classList.remove("opacity-50", "cursor-not-allowed");
-          voteButton.disabled = false;
-        } else {
-          voteButton.classList.add("opacity-50", "cursor-not-allowed");
-          voteButton.disabled = true;
-        }
-      });
+      function toggleButtonState() {
+        const isEnabled = userNameInput.value.trim() !== "";
+        voteButton.classList.toggle("opacity-50", !isEnabled);
+        voteButton.classList.toggle("cursor-not-allowed", !isEnabled);
+        voteButton.disabled = !isEnabled;
 
-      voteButton.addEventListener("click", () => {
+        updateButton.classList.toggle("opacity-50", !isEnabled);
+        updateButton.classList.toggle("cursor-not-allowed", !isEnabled);
+        updateButton.disabled = !isEnabled;
+
+        deleteButton.classList.toggle("opacity-50", !isEnabled);
+        deleteButton.classList.toggle("cursor-not-allowed", !isEnabled);
+        deleteButton.disabled = !isEnabled;
+      }
+
+      userNameInput.addEventListener("input", toggleButtonState);
+
+      function handleAction(action) {
         const party = document.getElementById("partyDropdown").value;
         const userName = userNameInput.value.trim();
 
-        if (!party) {
-          showToast("Please select a party to vote for.", "error");
+        if (!party && action !== "delete") {
+          showToast("Please select a party to perform the action.", "error");
           return;
         }
 
-        fetch("/api/vote/submit", {
+        fetch(`/api/vote/submit`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ candidate: party, user: userName }),
+          body: JSON.stringify({ candidate: party, user: userName, action }),
         })
-          .then((response) => response.json())
+          .then((response) => {
+            if (!response.ok) {
+              return response.json().then((data) => {
+                throw new Error(data.error || "Error submitting action.");
+              });
+            }
+            return response.json();
+          })
           .then(() => {
             showToast(
-              `Thank you, ${userName}. You voted for Party ${party}`,
+              `Thank you, ${userName}. Your action ${action} on Party ${party} was successful.`,
               "success"
             );
           })
           .catch((error) => {
-            console.error("Error submitting vote:", error);
-            showToast("Error submitting vote.", "error");
+            console.error(`Error performing ${action}:`, error);
+            showToast(error.message, "error");
           });
-      });
+      }
+
+      voteButton.addEventListener("click", () => handleAction("create"));
+      updateButton.addEventListener("click", () => handleAction("update"));
+      deleteButton.addEventListener("click", () => handleAction("delete"));
 
       function showToast(message, type) {
         Toastify({

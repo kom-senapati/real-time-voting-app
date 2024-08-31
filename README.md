@@ -54,10 +54,11 @@ To get started with the Real-Time Vote App:
    source ~/.bashrc
    ```
 
-4. **Start the Fluvio cluster**: Follow the instructions at [Fluvio GitHub](https://github.com/infinyon/fluvio):
+4. **Start the Fluvio cluster and create a topic**: Follow the instructions at [Fluvio GitHub](https://github.com/infinyon/fluvio):
 
    ```bash
    fluvio cluster start
+   fluvio topic create vote-topic
    ```
 
 5. **Install dependencies**:

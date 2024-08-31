@@ -8,40 +8,101 @@ const router = express.Router();
 
 const votesFilePath = path.join(__dirname, "../data/votes.json");
 
-router.post("/submit", async (req: Request, res: Response) => {
-  const { candidate, user } = req.body;
+interface VotesData {
+  [candidate: string]: string[];
+}
 
-  if (!candidate) {
-    return res.status(400).send({ error: "Candidate is required." });
-  }
+interface SubmitRequestBody {
+  candidate?: string;
+  user: string;
+  action: "create" | "update" | "delete";
+}
 
-  if (!user) {
-    return res.status(400).send({ error: "User is required." });
-  }
+router.post(
+  "/submit",
+  async (req: Request<{}, {}, SubmitRequestBody>, res: Response) => {
+    let { candidate, user, action } = req.body;
+    let oldParty = "";
 
-  try {
-    const votesData = JSON.parse(fs.readFileSync(votesFilePath, "utf8"));
+    if (!candidate && action !== "delete") {
+      return res.status(400).send({ error: "Candidate is required." });
+    }
 
-    for (const key of Object.keys(votesData)) {
-      if (votesData[key].includes(user)) {
-        return res.status(400).send({ error: "User has already voted." });
+    if (!user) {
+      return res.status(400).send({ error: "User is required." });
+    }
+
+    if (!["create", "update", "delete"].includes(action)) {
+      return res.status(400).send({ error: "Invalid action." });
+    }
+
+    try {
+      const votesData: VotesData = JSON.parse(
+        fs.readFileSync(votesFilePath, "utf8")
+      );
+      const hasVoted = Object.values(votesData).some((voters: string[]) =>
+        voters.includes(user)
+      );
+
+      if (action === "create") {
+        if (hasVoted) {
+          return res.status(400).send({ error: "User has already voted." });
+        }
+
+        if (!votesData[candidate!]) {
+          votesData[candidate!] = [];
+        }
+        votesData[candidate!].push(user);
+      } else if (action === "update") {
+        if (!hasVoted) {
+          return res.status(400).send({ error: "User has not voted yet." });
+        }
+
+        for (const key of Object.keys(votesData)) {
+          if (votesData[key].includes(user)) {
+            if (votesData[key].includes(user)) {
+              votesData[key] = votesData[key].filter(
+                (voter: string) => voter !== user
+              );
+              oldParty = key;
+              break;
+            }
+          }
+        }
+
+        if (!votesData[candidate!]) {
+          votesData[candidate!] = [];
+        }
+        votesData[candidate!].push(user);
+      } else if (action === "delete") {
+        if (!hasVoted) {
+          return res.status(400).send({ error: "User has not voted yet." });
+        }
+
+        for (const key of Object.keys(votesData)) {
+          if (votesData[key].includes(user)) {
+            votesData[key] = votesData[key].filter(
+              (voter: string) => voter !== user
+            );
+            candidate = key;
+          }
+        }
       }
+
+      fs.writeFileSync(votesFilePath, JSON.stringify(votesData, null, 2));
+
+      const eventData = `${user}:${action}:${candidate}:${oldParty}`;
+      await sendVote(JSON.stringify(eventData));
+
+      res
+        .status(200)
+        .send({ message: "Vote operation completed successfully." });
+    } catch (error) {
+      console.error("Error submitting vote:", error);
+      res.status(500).send({ error: "Failed to perform vote operation." });
     }
-
-    if (!votesData[candidate]) {
-      votesData[candidate] = [];
-    }
-    votesData[candidate].push(user);
-
-    fs.writeFileSync(votesFilePath, JSON.stringify(votesData, null, 2));
-
-    await sendVote(candidate);
-    res.status(200).send({ message: "Vote submitted successfully." });
-  } catch (error) {
-    console.error("Error submitting vote:", error);
-    res.status(500).send({ error: "Failed to submit vote." });
   }
-});
+);
 
 router.get("/stream", async (_req: Request, res: Response) => {
   try {
@@ -71,7 +132,7 @@ router.get("/stream", async (_req: Request, res: Response) => {
 
 router.get("/", async (_req: Request, res: Response) => {
   try {
-    const votesData = JSON.parse(fs.readFileSync(votesFilePath, 'utf8'));
+    const votesData = JSON.parse(fs.readFileSync(votesFilePath, "utf8"));
 
     const voteCounts: { [key: string]: number } = {};
     for (const candidate in votesData) {
